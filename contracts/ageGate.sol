@@ -52,7 +52,7 @@ contract AgeGate {
         _;
     }
 
-    function doAdultThing() external onlyAdult returns (string memory) {
+    function doAdultThing() view external onlyAdult returns (string memory) {
         return "Access granted";
     }
 }
