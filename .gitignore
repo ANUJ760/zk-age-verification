@@ -13,6 +13,12 @@
 # Hardhat compilation (v2) support directory
 /cache
 
+# Circuit and proof generated outputs
+/build
+/typechain-types
+/zkeys/*.zkey
+/zkeys/*.ptau
+
 # Typechain output
 /types
 
