@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>ZK Age Verifier</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+  <script src="https://unpkg.com/snarkjs@0.7.3/build/snarkjs.min.js"></script>
+</head>
+<body>
+
+  <h1>Prove your age without revealing it</h1>
+  <input type="number" id="birthYear" placeholder="Birth year (e.g. 1995)" />
+  <button id="proveBtn">Generate Proof & Verify On-chain</button>
+  <div id="status"></div>
+
+  <script type="module">
+    const snarkjs = window.snarkjs;
+    if (!snarkjs) {
+    console.error("snarkjs failed to load");
+    } else {
+    console.log("snarkjs loaded ✓", Object.keys(snarkjs));
+    }
+
+    document.getElementById("proveBtn").addEventListener("click", async () => {
+      const status = document.getElementById("status");
+      const birthYear = parseInt(document.getElementById("birthYear").value);
+
+      if (!birthYear || birthYear < 1900 || birthYear > 2024) {
+        status.textContent = "Please enter a valid birth year.";
+        return;
+      }
+
+      try {
+        status.textContent = "Generating ZK proof...";
+
+        const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+          { birthYear, currentYear: 2024 },
+          "../build/ageCheck_js/ageCheck.wasm",
+          "../zkeys/ageCheck_final.zkey"
+        );
+
+        status.textContent = "Proof generated! Connecting wallet...";
+
+        const calldata = await snarkjs.groth16.exportSolidityCallData(proof, publicSignals);
+        const [pA, pB, pC] = parseCalldata(calldata);
+
+        if (!window.ethereum) {
+          status.textContent = "MetaMask not found. Please install it.";
+          return;
+        }
+
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const signer = await provider.getSigner();
+
+        const AGE_GATE_ADDRESS = "0x..."; // ← your deployed address here
+        const AGE_GATE_ABI = [
+          "function verify(uint[2] calldata pA, uint[2][2] calldata pB, uint[2] calldata pC) external",
+          "function verified(address) external view returns (bool)"
+        ];
+
+        const contract = new ethers.Contract(AGE_GATE_ADDRESS, AGE_GATE_ABI, signer);
+
+        status.textContent = "Sending proof to chain...";
+        const tx = await contract.verify(pA, pB, pC);
+        await tx.wait();
+
+        status.textContent = "✓ Age verified on-chain! Your birth year was never revealed.";
+
+      } catch (err) {
+        console.error(err);
+        status.textContent = "Error: " + err.message;
+      }
+    });
+
+    function parseCalldata(calldata) {
+      const argv = calldata
+        .replace(/["[\]\s]/g, "")
+        .split(",")
+        .map(x => BigInt(x));
+
+      return [
+        [argv[0], argv[1]],
+        [[argv[2], argv[3]], [argv[4], argv[5]]],
+        [argv[6], argv[7]],
+      ];
+    }
+  </script>
+
+</body>
+</html>
